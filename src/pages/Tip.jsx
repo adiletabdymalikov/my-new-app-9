@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios'; 
-import 'bootstrap/dist/css/bootstrap.min.css'; 
 
 export function Tip() {
   const [products, setProducts] = useState([]);      
@@ -10,37 +9,31 @@ export function Tip() {
   const [selectedCategory, setSelectedCategory] = useState(null); 
   const [cart, setCart] = useState([]);             
   const [orders, setOrders] = useState([]);          
-
   useEffect(() => {
-    Promise.all([
-      axios.get('https://fakestoreapi.com/products'),
-      axios.get('https://fakestoreapi.com/products/categories') 
-    ])
-    .then(([prodRes, catRes]) => {
-      const formattedCategories = catRes.data.map((name, index) => ({
-        id: index + 1,
-        name: name
-      }));
-      const formattedProducts = prodRes.data.map(item => ({
-        ...item,
-        images: [item.image], 
-        category: {
-          id: catRes.data.indexOf(item.category) + 1, 
-          name: item.category
-        }
-      }));
-
-      setProducts(formattedProducts);
-      setFiltered(formattedProducts); 
-      setCategories(formattedCategories.slice(0, 6)); 
-    })
-    .catch(err => console.error("Ошибка при загрузке:", err));
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css';
+    document.head.appendChild(link);
+    return () => { document.head.removeChild(link); };
   }, []);
 
-  const applyFilters = (text, categoryId) => {
+  
+  useEffect(() => {
+    axios.get('https://fakestoreapi.noksha.dev/api/products')
+      .then((res) => {
+        const rawData = res.data.data || res.data || [];
+        setProducts(rawData);
+        setFiltered(rawData);
+        const uniqueNames = Array.from(new Set(rawData.map(i => i.category).filter(Boolean)));
+        setCategories(uniqueNames.slice(0, 6));
+      })
+      .catch(err => console.error(err));
+  }, []);
+  const applyFilters = (text, categoryName) => {
+    const query = (text || '').toLowerCase().trim();
     const result = products
-      .filter(item => !categoryId || (item.category && item.category.id === categoryId))
-      .filter(item => !text.trim() || (item.title && item.title.toLowerCase().includes(text.toLowerCase())));
+      .filter(item => !categoryName || item.category === categoryName)
+      .filter(item => !query || item.title?.toLowerCase().includes(query));
     setFiltered(result);
   };
 
@@ -49,31 +42,30 @@ export function Tip() {
     applyFilters(text, selectedCategory);
   };
 
-  const handleCategorySelect = (categoryId) => {
-    setSelectedCategory(categoryId);
-    applyFilters(searchText, categoryId);
+  const handleCategorySelect = (categoryName) => {
+    setSelectedCategory(categoryName);
+    applyFilters(searchText, categoryName);
   };
 
   const addToCart = (product) => {
-    const isExist = cart.some(item => item.id === product.id);
+    const isExist = cart.some(item => (item._id || item.id) === (product._id || product.id));
     setCart(isExist 
-      ? cart.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item)
+      ? cart.map(item => (item._id || item.id) === (product._id || product.id) ? { ...item, quantity: item.quantity + 1 } : item)
       : [...cart, { ...product, quantity: 1 }]
     );
   };
 
   const removeFromCart = (productId) => {
-    const target = cart.find(item => item.id === productId);
+    const target = cart.find(item => (item._id || item.id) === productId);
     setCart(target?.quantity === 1 
-      ? cart.filter(item => item.id !== productId)
-      : cart.map(item => item.id === productId ? { ...item, quantity: item.quantity - 1 } : item)
+      ? cart.filter(item => (item._id || item.id) !== productId)
+      : cart.map(item => (item._id || item.id) === productId ? { ...item, quantity: item.quantity - 1 } : item)
     );
   };
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const handleCheckout = () => {
     if (!cart.length) return;
-
     setOrders([{
       id: orders.length + 1,
       date: '28.05.26', 
@@ -106,14 +98,14 @@ export function Tip() {
         >
           All
         </button>
-        {categories.map(cat => (
+        {categories.map((catName, index) => (
           <button
-            key={cat.id}
-            className={`btn btn-sm ${selectedCategory === cat.id ? 'btn-dark' : 'btn-outline-dark'}`}
-            onClick={() => handleCategorySelect(cat.id)}
+            key={index}
+            className={`btn btn-sm ${selectedCategory === catName ? 'btn-dark' : 'btn-outline-dark'}`}
+            onClick={() => handleCategorySelect(catName)}
             style={{ borderRadius: '20px', padding: '6px 15px', textTransform: 'capitalize' }}
           >
-            {cat.name}
+            {catName}
           </button>
         ))}
       </div>
@@ -124,7 +116,7 @@ export function Tip() {
           <div className="row g-3">
             {filtered.length ? (
               filtered.map(item => (
-                <div key={item.id} className="col-sm-6 col-md-4">
+                <div key={item._id || item.id} className="col-sm-6 col-md-4">
                   <div className="card h-100 p-2 border-0 shadow-sm" style={{ borderRadius: '15px' }}>
                     <button 
                       className="btn btn-dark position-absolute rounded-circle" 
@@ -134,7 +126,7 @@ export function Tip() {
                       +
                     </button>
                     <img 
-                      src={item.images?.[0]} 
+                      src={Array.isArray(item.images) ? item.images[0] : (item.image || 'https://via.placeholder.com/180')} 
                       alt={item.title} 
                       className="card-img-top rounded" 
                       style={{ height: '180px', objectFit: 'contain', background: '#fff' }} 
@@ -143,7 +135,7 @@ export function Tip() {
                     <div className="card-body px-1 py-2 d-flex justify-content-between align-items-center">
                       <div className="text-truncate me-2" style={{ maxWidth: '70%' }}>
                         <span className="text-dark small d-block text-truncate">{item.title}</span>
-                        <span className="text-muted" style={{ fontSize: '10px', textTransform: 'capitalize' }}>{item.category?.name}</span>
+                        <span className="text-muted" style={{ fontSize: '10px', textTransform: 'capitalize' }}>{item.category}</span>
                       </div>
                       <span className="fw-bold">${item.price}</span>
                     </div>
@@ -164,10 +156,10 @@ export function Tip() {
             ) : (
               <div>
                 {cart.map(item => (
-                  <div key={item.id} className="d-flex justify-content-between align-items-center my-3">
+                  <div key={item._id || item.id} className="d-flex justify-content-between align-items-center my-3">
                     <span className="small text-truncate" style={{ maxWidth: '140px' }}>{item.title}</span>
                     <div className="d-flex align-items-center gap-2">
-                      <button className="btn btn-sm btn-light py-0" onClick={() => removeFromCart(item.id)}>-</button>
+                      <button className="btn btn-sm btn-light py-0" onClick={() => removeFromCart(item._id || item.id)}>-</button>
                       <span className="small fw-bold">{item.quantity}</span>
                       <button className="btn btn-sm btn-light py-0" onClick={() => addToCart(item)}>+</button>
                       <span className="small fw-bold ms-2">${item.price * item.quantity}</span>
